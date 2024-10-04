@@ -1,8 +1,9 @@
 services:
   salmon_run_notifier:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: NaruZosa/salmon_run_notifier:latest
+    build:  # Fallback in case the image is unavailable
+      context: ..
+      dockerfile: ../Dockerfile
     volumes:
       - C:\Your\Path\config:/app/config
     environment:

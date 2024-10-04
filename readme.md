@@ -2,16 +2,16 @@
 
 Welcome to the **Salmon Run Notifier**! This Python script fetches the current and upcoming Salmon Run schedules from Splatoon 3 and sends notifications using the Apprise library. It ensures you never miss a Salmon Run rotation by providing timely alerts. 🎉
 
-## Table of Contents 📑
+## 📑 Table of Contents
 
-- [Features](#features)
-- [Requirements](#requirements)
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [Usage](#usage)
-- [Logging](#logging)
-- [Error Handling](#error-handling)
-- [Contributing](#contributing)
+- [Features](#features-)
+- [Requirements](#requirements-)
+- [Installation](#installation-)
+- [Configuration](#configuration-)
+- [Usage](#usage-)
+- [Logging](#logging-)
+- [Error Handling](#error-handling-)
+- [Contributing](#contributing-)
 
 ## Features ✨
 
@@ -31,6 +31,8 @@ Welcome to the **Salmon Run Notifier**! This Python script fetches the current a
 
 ## Installation 🛠️
 
+### Option 1: Using Poetry
+
 1. Clone the repository:
     ```sh
     git clone https://github.com/NaruZosa/salmon-run-notifier.git
@@ -39,7 +41,44 @@ Welcome to the **Salmon Run Notifier**! This Python script fetches the current a
 
 2. Install the required libraries:
     ```sh
-    pip install apprise requests python-dateutil loguru
+    pip install poetry
+    poetry install --without dev
+    ```
+
+3. Run the program:
+    ```sh
+    poetry run python -m main
+    ```
+
+### Option 2a: Using Docker Compose with remote image
+
+1. Create a `compose.yaml` file with the following content:
+    ```yaml
+    services:
+      salmon_run_notifier:
+        image: NaruZosa/salmon_run_notifier:latest
+        volumes:
+          - C:\Your\Path\config:/app/config
+        environment:
+          - PYTHONUNBUFFERED=1
+    ```
+
+2. Run the program using Docker Compose:
+    ```sh
+    docker compose up
+    ```
+
+### Option 2b: Using Docker Compose with local build fallback
+
+1. Clone the repository:
+    ```sh
+    git clone https://github.com/NaruZosa/salmon-run-notifier.git
+    cd salmon-run-notifier
+    ```
+
+2. Run the program using Docker Compose:
+    ```sh
+    docker compose up
     ```
 
 ## Configuration ⚙️
