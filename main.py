@@ -66,7 +66,8 @@ def load_config(config_path: Path, config_template_path: Path) -> Config:
             logger.info("Configuration doesn't exist. Copying template.")
             config_path.parent.mkdir(parents=True, exist_ok=True)  # Make the config directory if it doesn't exist.
             shutil.copy(config_template_path, config_path)
-            logger.info(f"Configuration template copied to {config_template_path}. Edit the configuration and restart the program. Exiting the lobby.")
+            logger.info(f"Configuration template copied to {config_template_path}. Edit the configuration and restart the program. Exiting the lobby in 10 seconds.")
+            time.sleep(10)
             sys.exit(66)  # Equivalent to 'EX_NOINPUT'
         with config_path.open("rb") as f:
             config_data = tomllib.load(f)
