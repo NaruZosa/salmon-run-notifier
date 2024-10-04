@@ -56,7 +56,7 @@ Welcome to the **Salmon Run Notifier**! This Python script fetches the current a
     ```yaml
     services:
       salmon_run_notifier:
-        image: NaruZosa/salmon_run_notifier:latest
+        image: naruzosa/salmon_run_notifier:latest
         volumes:
           - C:\Your\Path\config:/app/config
         environment:
