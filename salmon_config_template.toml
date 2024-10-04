@@ -1,0 +1,20 @@
+# Salmon Run Notifier Configuration File
+
+[settings]
+# The local timezone for the notifier (e.g., "America/New_York")
+local_timezone = "Your/Timezone"
+
+# The start hour of the quiet period (0 = midnight)
+alert_quiet_start = 0  # Midnight
+
+# The end hour of the quiet period (10 = 10 AM)
+alert_quiet_end = 10  # 10 AM
+
+# The Apprise notification paths in a list (e.g., ["tgram://<token>/<chat_id>"])
+apprise_paths = ["tgram://your_telegram_token/your_chat_id"]
+
+# The API endpoint for fetching Salmon Run schedules
+schedules_api = "https://splatoon3.ink/data/schedules.json"
+
+# The number of hours to wait before notifying of consistent failures
+failure_threshold_hours = 6  # 6 hours

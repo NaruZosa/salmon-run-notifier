@@ -1,0 +1,28 @@
+[tool.poetry]
+name = "salmon-run-notifier"
+version = "1.0.0"
+description = "This Python script fetches the current and upcoming Salmon Run schedules from Splatoon 3 and sends notifications using the Apprise library. It ensures you never miss a Salmon Run rotation by providing timely alerts."
+authors = ["Bradley Smyth <squidparty2015@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+requests = "^2.32.3"
+python-dateutil = "^2.9.0"
+loguru = "^0.7.2"
+apprise = "^1.9.0"
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.6.9"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+
+[tool.ruff.lint]
+# Enable Pyflakes (`F`) and a subset of the pycodestyle (`E`)  codes by default.
+# Unlike Flake8, Ruff doesn't enable pycodestyle warnings (`W`) or
+# McCabe complexity (`C901`) by default.
+select = ["ALL"]
+ignore = ["E501"]

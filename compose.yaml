@@ -1,0 +1,9 @@
+services:
+  salmon_run_notifier:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - C:\Your\Path\config:/app/config
+    environment:
+      - PYTHONUNBUFFERED=1
