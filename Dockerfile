@@ -18,5 +18,9 @@ COPY pyproject.toml poetry.lock main.py salmon_config_template.toml ./
 # Install dependencies
 RUN poetry install --without dev
 
+# Create config directory and change permissions
+RUN mkdir -p /app/config
+RUN chmod 0777 -R /app/config # Fix directory permissions issues, notably affecting Unraid
+
 # Run the application
 CMD ["poetry", "run", "python", "-m", "main"]
