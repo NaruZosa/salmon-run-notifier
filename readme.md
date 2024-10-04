@@ -4,16 +4,16 @@ Welcome to the **Salmon Run Notifier**! This Python script fetches the current a
 
 ## 📑 Table of Contents
 
-- [Features](#features-)
-- [Requirements](#requirements-)
-- [Installation](#installation-)
-- [Configuration](#configuration-)
-- [Usage](#usage-)
-- [Logging](#logging-)
-- [Error Handling](#error-handling-)
-- [Contributing](#contributing-)
+- [✨ Features](#features)
+- [📋 Requirements](#requirements)
+- [🛠️ Installation](#installation)
+- [⚙️ Configuration](#configuration)
+- [🚀 Usage](#usage)
+- [📜 Logging](#logging)
+- [🛡️ Error Handling](#error-handling)
+- [🤝 Contributing](#contributing)
 
-## Features ✨
+## Features
 
 - Fetches current and upcoming Salmon Run schedules.
 - Sends notifications using Apprise.
@@ -21,7 +21,7 @@ Welcome to the **Salmon Run Notifier**! This Python script fetches the current a
 - Notifies if there are consistent failures for more than a specified threshold.
 - Configurable quiet hours to avoid notifications during your beauty sleep. 😴
 
-## Requirements 📋
+## Requirements
 
 - Python 3.12+
 - `apprise` library
@@ -29,7 +29,7 @@ Welcome to the **Salmon Run Notifier**! This Python script fetches the current a
 - `python-dateutil` library
 - `loguru` library
 
-## Installation 🛠️
+## Installation
 
 ### Option 1: Using Poetry
 
@@ -81,7 +81,7 @@ Welcome to the **Salmon Run Notifier**! This Python script fetches the current a
     docker compose up
     ```
 
-## Configuration ⚙️
+## Configuration
 
 
 Create a `salmon_config.toml` file in the same directory as the script with the following content:
@@ -109,22 +109,22 @@ schedules_api = "https://splatoon3.ink/data/schedules.json"
 failure_threshold_hours = 6  # 6 hours
 ```
 
-## Usage 🚀
+## Usage
 
 Run the script using Python:
 ```sh
 python salmon_run_notifier.py
 ```
 
-## Logging 📜
+## Logging
 
 The script uses the `loguru` library for logging. It logs debug information, errors, and notifications to help trace the flow of the program and identify issues.
 
-## Error Handling 🛡️
+## Error Handling
 
 The script includes robust error handling to manage exceptions during API calls, schedule processing, and notification sending. It retries on failure and notifies if there are consistent failures for more than 6 hours.
 
-## Contributing 🤝
+## Contributing
 
 Contributions are welcome! Please fork the repository and submit a pull request with your changes. Let's make sure no Inkling or Octoling misses a (good) Salmon Run rotation ever again! 🦑
 
