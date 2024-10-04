@@ -33,7 +33,7 @@ Welcome to the **Salmon Run Notifier**! This Python script fetches the current a
 
 1. Clone the repository:
     ```sh
-    git clone https://github.com/yourusername/salmon-run-notifier.git
+    git clone https://github.com/NaruZosa/salmon-run-notifier.git
     cd salmon-run-notifier
     ```
 
