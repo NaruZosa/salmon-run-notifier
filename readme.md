@@ -6,9 +6,8 @@ Welcome to the **Salmon Run Notifier**! This Python script fetches the current a
 
 - [✨ Features](#features)
 - [📋 Requirements](#requirements)
-- [🛠️ Installation](#installation)
+- [🛠️ Installation and usage](#installation-and-usage)
 - [⚙️ Configuration](#configuration)
-- [🚀 Usage](#usage)
 - [📜 Logging](#logging)
 - [🛡️ Error Handling](#error-handling)
 - [🤝 Contributing](#contributing)
@@ -29,7 +28,7 @@ Welcome to the **Salmon Run Notifier**! This Python script fetches the current a
 - `python-dateutil` library
 - `loguru` library
 
-## Installation
+## Installation and Usage
 
 ### Option 1: Using Poetry
 
@@ -107,13 +106,6 @@ schedules_api = "https://splatoon3.ink/data/schedules.json"
 
 # The number of hours to wait before notifying of consistent failures
 failure_threshold_hours = 6  # 6 hours
-```
-
-## Usage
-
-Run the script using Python:
-```sh
-python salmon_run_notifier.py
 ```
 
 ## Logging
