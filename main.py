@@ -131,6 +131,7 @@ def get_schedules(schedules_api: str) -> Dict[str, Any]:  # noqa: FA100
         response.raise_for_status()
         schedules = response.json()["data"]["coopGroupingSchedule"]
         with cache_path.open("w") as cache_file:
+            # noinspection PyTypeChecker
             json.dump(schedules, cache_file)
         logger.debug("Fetched schedules successfully and updated cache. Ready to splat some Salmonids!")
         return {
@@ -168,7 +169,7 @@ def tidy_schedules(schedules: Dict[str, Any], local_timezone: tz.tzfile) -> list
                 updated_rotation = {
                     "seconds_until_rotation": start_time.timestamp() - datetime.datetime.now(tz=datetime.timezone.utc).timestamp(),
                     "stage": rotation["setting"]["coopStage"]["name"],
-                    "boss": rotation["setting"]["boss"]["name"],
+                    "boss": rotation["setting"]["boss"]["name"] if rotation["setting"]["boss"]["name"] is not None else "Random",
                     "weapons": [weapon["name"] if weapon["__splatoon3ink_id"] != "747937841598fff7" else "Grizzco Random" for weapon in rotation["setting"]["weapons"]],
                     "type": schedule_type,
                     "start_time": start_time.astimezone(local_timezone),
@@ -220,6 +221,7 @@ def update_alert_file(rotation: dict) -> None:
     alerts = alerts[-3:]
 
     with alert_file.open("w") as file:
+        # noinspection PyTypeChecker
         json.dump(alerts, file, indent=4)
     logger.debug("Alert file updated. Keeping track of the latest Salmon Run rotations.")
 
@@ -302,6 +304,7 @@ def notify_failure(notifier: apprise.Apprise) -> None:
         logger.exception(f"Failed to send failure notification: {e}. Notification splatted by a Charger!")
 
 
+# noinspection PyUnusedLocal
 def terminate(sigterm: signal.SIGTERM, frame: types.FrameType) -> None:  # noqa: ARG001
     """Terminate cleanly. Needed for stopping swiftly when docker sends the command to stop.
 
