@@ -169,7 +169,7 @@ def tidy_schedules(schedules: Dict[str, Any], local_timezone: tz.tzfile) -> list
                 updated_rotation = {
                     "seconds_until_rotation": start_time.timestamp() - datetime.datetime.now(tz=datetime.timezone.utc).timestamp(),
                     "stage": rotation["setting"]["coopStage"]["name"],
-                    "boss": rotation["setting"]["boss"]["name"] if rotation["setting"]["boss"]["name"] is not None else "Random",
+                    "boss": rotation["setting"]["boss"]["name"] if rotation["setting"]["boss"] is not None else "Random",
                     "weapons": [weapon["name"] if weapon["__splatoon3ink_id"] != "747937841598fff7" else "Grizzco Random" for weapon in rotation["setting"]["weapons"]],
                     "type": schedule_type,
                     "start_time": start_time.astimezone(local_timezone),
