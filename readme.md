@@ -55,7 +55,7 @@ Welcome to the **Salmon Run Notifier**! This Python script fetches the current a
     ```yaml
     services:
       salmon_run_notifier:
-        image: ghcr.io/naruzosa/salmon-run-notifier:master
+        image: ghcr.io/naruzosa/salmon-run-notifier:latest
         volumes:
           - C:\Your\Path\config:/app/config   <- Replace the path on the left with your path
         environment:
@@ -71,7 +71,7 @@ Welcome to the **Salmon Run Notifier**! This Python script fetches the current a
 
 1. Clone the repository:
     ```sh
-    git clone ghcr.io/naruzosa/salmon-run-notifier:master
+    git clone ghcr.io/naruzosa/salmon-run-notifier:latest
     cd salmon-run-notifier
     ```
 
