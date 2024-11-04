@@ -1,12 +1,12 @@
 [tool.poetry]
 name = "salmon-run-notifier"
-version = "1.0.0"
+version = "1.0.2"
 description = "This Python script fetches the current and upcoming Salmon Run schedules from Splatoon 3 and sends notifications using the Apprise library. It ensures you never miss a Salmon Run rotation by providing timely alerts."
 authors = ["Bradley Smyth <squidparty2015@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = "^3.13"
 requests = "^2.32.3"
 python-dateutil = "^2.9.0"
 loguru = "^0.7.2"

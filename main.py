@@ -5,6 +5,7 @@ import shutil
 import signal
 import sys
 import time
+import tomllib
 import types
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,7 +13,6 @@ from typing import Any, Dict
 
 import apprise
 import requests
-import tomllib
 from dateutil import tz
 from loguru import logger
 
