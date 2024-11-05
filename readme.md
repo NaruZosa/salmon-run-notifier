@@ -12,6 +12,10 @@ Welcome to the **Salmon Run Notifier**! This Python script fetches the current a
 - [🛡️ Error Handling](#error-handling)
 - [🤝 Contributing](#contributing)
 
+## Examples
+![Example 1.png](doc/Example_1.png)
+![Example 2.png](doc/Example_2.png)
+
 ## Features
 
 - Fetches current and upcoming Salmon Run schedules.
@@ -155,7 +159,7 @@ The script uses the `loguru` library for logging. It logs debug information, err
 The script includes robust error handling to manage exceptions during API calls, schedule processing, and notification sending. It retries on failure and notifies if there are consistent failures for more than 6 hours.
 
 ## Dependencies
-This project uses [Apprise](https://github.com/caronc/apprise), [Loguru](https://github.com/Delgan/loguru) and [Requests](https://github.com/psf/requests)
+This project uses [Apprise](https://github.com/caronc/apprise), [Loguru](https://github.com/Delgan/loguru) and [Requests](https://github.com/psf/requests) and the [splatoon3.ink API](https://splatoon3.ink) 
 
 ## Contributing
 
