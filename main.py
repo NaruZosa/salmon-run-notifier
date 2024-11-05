@@ -5,7 +5,6 @@ import shutil
 import signal
 import sys
 import time
-import tomllib
 import types
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,6 +12,7 @@ from typing import Any, Dict
 
 import apprise
 import requests
+import tomllib
 from dateutil import tz
 from loguru import logger
 
@@ -31,6 +31,7 @@ class Config:
         apprise_paths (list): The Apprise notification paths in a list.
         schedules_api (str): The API endpoint for fetching Salmon Run schedules.
         failure_threshold_hours (int): The number of hours to wait before notifying of consistent failures.
+        simple_console_logger(bool): Whether to use a simpler console logger and silence DEBUG.
 
     """
 
@@ -40,6 +41,7 @@ class Config:
     apprise_paths: list
     schedules_api: str
     failure_threshold_hours: int
+    simple_console_logger: bool
 
 
 def load_config(config_path: Path, config_template_path: Path) -> Config:
@@ -66,13 +68,13 @@ def load_config(config_path: Path, config_template_path: Path) -> Config:
             logger.info("Configuration doesn't exist. Copying template.")
             config_path.parent.mkdir(parents=True, exist_ok=True)  # Make the config directory if it doesn't exist.
             shutil.copy(config_template_path, config_path)
-            logger.info(f"Configuration template copied to {config_template_path}. Edit the configuration and restart the program. Exiting the lobby in 10 seconds.")
+            logger.info(f"Configuration template copied to {config_path}. Edit the configuration and restart the program. Exiting the lobby in 10 seconds.")
             time.sleep(10)
             sys.exit(66)  # Equivalent to 'EX_NOINPUT'
         with config_path.open("rb") as f:
             config_data = tomllib.load(f)
         settings = config_data["settings"]
-        logger.info("Configuration loaded. Ready to ink some turf!")
+
         return Config(
             local_timezone=settings["local_timezone"],
             alert_quiet_start=settings["alert_quiet_start"],
@@ -80,6 +82,7 @@ def load_config(config_path: Path, config_template_path: Path) -> Config:
             apprise_paths=settings["apprise_paths"],
             schedules_api=settings["schedules_api"],
             failure_threshold_hours=settings["failure_threshold_hours"],
+            simple_console_logger=settings["simple_console_logger"],
         )
     except (FileNotFoundError, KeyError, tomllib.TOMLDecodeError) as e:
         logger.exception(f"Error loading configuration: {e}. Exiting the lobby.")
@@ -125,7 +128,7 @@ def get_schedules(schedules_api: str) -> Dict[str, Any]:  # noqa: FA100
                 }
 
     try:
-        with Path("pyproject.toml").open("rb") as pyproject:
+        with local_file("pyproject.toml").open("rb") as pyproject:
             version = tomllib.load(pyproject)["tool"]["poetry"]["version"]
         response = requests.get(schedules_api, headers={"User-Agent": f"Salmon Run Notifier - Version {version}"})  # noqa: S113
         response.raise_for_status()
@@ -318,12 +321,33 @@ def terminate(sigterm: signal.SIGTERM, frame: types.FrameType) -> None:  # noqa:
     sys.exit(0)
 
 
+def local_file(file_name: str, *, resources_folder: bool = False) -> Path:
+    """Pull file from exe if packaged with PyInstaller, otherwise pull file from next to Salmon Run Notifier.
+
+    Args:
+    ----
+        file_name (str): The file name.
+        resources_folder (bool): Whether to pull from the 'resources' subfolder.
+
+    """
+    if resources_folder:
+        file_name = Path("resources") / file_name
+    if hasattr(sys, "_MEIPASS"):
+        # noinspection PyProtectedMember
+        return Path(sys._MEIPASS) / file_name   # noqa: SLF001  -  Packaged with PyInstaller, pull from exe.
+    return Path.cwd() / file_name   # Not packaged with PyInstaller, pull from next to the Python file
+
+
 def main() -> None:
     """Run the main loop."""
     signal.signal(signal.SIGTERM, terminate)
     config_path = Path.cwd() / "config" / "salmon_config.toml"
-    config_template_path = Path.cwd() / "salmon_config_template.toml"
+
+    config_template_path = local_file("salmon_config_template.toml", resources_folder=True)  # Not packaged with PyInstaller, pull config template from next to the Python file
     config = load_config(config_path, config_template_path)
+    if config.simple_console_logger:
+        logger.configure(handlers=[{"sink": sys.stderr, "level": "INFO", "format": "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>"}])
+    logger.info("Configuration loaded. Ready to ink some turf!")
 
     local_timezone = tz.gettz(config.local_timezone)
     failure_threshold = config.failure_threshold_hours * 3600  # Convert hours to seconds
@@ -335,6 +359,7 @@ def main() -> None:
 
     while True:
         try:
+            # noinspection PyTypeChecker
             schedules = tidy_schedules(get_schedules(config.schedules_api), local_timezone)
             if not schedules:
                 if failure_start_time is None:

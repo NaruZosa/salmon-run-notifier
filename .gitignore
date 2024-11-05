@@ -1,3 +1,5 @@
 /.venv/
 /config/
 /dev/
+/build/
+/dist/

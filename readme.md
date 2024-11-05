@@ -22,7 +22,14 @@ Welcome to the **Salmon Run Notifier**! This Python script fetches the current a
 
 ## Requirements
 
-- Python 3.12+
+### Windows exe:
+- No requirements
+
+### Docker container:
+- Docker
+
+### Python package
+- Python 3.13
 - `apprise` library
 - `requests` library
 - `python-dateutil` library
@@ -30,8 +37,12 @@ Welcome to the **Salmon Run Notifier**! This Python script fetches the current a
 
 ## Installation and Usage
 
-### Option 1: Using Poetry
+### Option 1: Windows binary
+1. Download the latest exe [releases](/releases/latest/download/asset-name.zip) 
+2. Run the exe
 
+
+### Option 2a: Using Poetry
 1. Clone the repository:
     ```sh
     git clone https://github.com/NaruZosa/salmon-run-notifier.git
@@ -40,16 +51,35 @@ Welcome to the **Salmon Run Notifier**! This Python script fetches the current a
 
 2. Install the required libraries:
     ```sh
-    pip install poetry
-    poetry install --without dev
+    pip install -r requirements.txt
     ```
 
-3. Run the program:
+3. Run the program to generate a configuration file, edit the configuration (see below) and run again:
     ```sh
     poetry run python -m main
     ```
 
-### Option 2a: Using Docker Compose with remote image
+
+### Option 2a: Using pip
+1. Clone the repository:
+    ```sh
+    git clone https://github.com/NaruZosa/salmon-run-notifier.git
+    cd salmon-run-notifier
+    ```
+   
+2. Install the required libraries:
+    ```sh
+    pip install poetry
+    poetry install --without dev
+    ```
+
+3. Run the program to generate a configuration file, edit the configuration (see below) and run again:
+    ```sh
+    python -m main
+    ```
+
+
+### Option 3a: Using Docker Compose with remote image
 
 1. Create a `compose.yaml` file with the following content:
     ```yaml
@@ -62,12 +92,13 @@ Welcome to the **Salmon Run Notifier**! This Python script fetches the current a
           - PYTHONUNBUFFERED=1
     ```
 
-2. Run the program using Docker Compose:
+2. Run the program using Docker Compose to generate a configuration file, edit the configuration (see below) and run again::
     ```sh
     docker compose up
     ```
 
-### Option 2b: Using Docker Compose with local build fallback
+
+### Option 3b: Using Docker Compose with local build fallback
 
 1. Clone the repository:
     ```sh
@@ -75,15 +106,16 @@ Welcome to the **Salmon Run Notifier**! This Python script fetches the current a
     cd salmon-run-notifier
     ```
 
-2. Run the program using Docker Compose:
+2. Run the program using Docker Compose to generate a configuration file, edit the configuration (see below) and run again::
     ```sh
     docker compose up
     ```
 
+
 ## Configuration
 
 
-Create a `salmon_config.toml` file in the same directory as the script with the following content:
+On first run, a `salmon_config.toml` file will be generated in the `config` folder with the following content:
 
 ```toml
 # Salmon Run Notifier Configuration File
@@ -106,7 +138,13 @@ schedules_api = "https://splatoon3.ink/data/schedules.json"
 
 # The number of hours to wait before notifying of consistent failures
 failure_threshold_hours = 6  # 6 hours
+
+# Whether to use a simpler console logger and silence DEBUG (example: "2024-11-04 23:28:43 | INFO     | _Configuration loaded. Ready to ink some turf!" instead of "2024-11-04 23:28:43.405 | INFO     | __main__:load_config:75 - Configuration loaded. Ready to ink some turf!")
+simple_console_logger = true
 ```
+
+Adjust this file as needed. The only setting that must be adjusted is `apprise_paths`.
+For information on Apprise paths, refer to [their wiki](https://github.com/caronc/apprise/wiki).
 
 ## Logging
 
@@ -115,6 +153,9 @@ The script uses the `loguru` library for logging. It logs debug information, err
 ## Error Handling
 
 The script includes robust error handling to manage exceptions during API calls, schedule processing, and notification sending. It retries on failure and notifies if there are consistent failures for more than 6 hours.
+
+## Dependencies
+This project uses [Apprise](https://github.com/caronc/apprise), [Loguru](https://github.com/Delgan/loguru) and [Requests](https://github.com/psf/requests)
 
 ## Contributing
 

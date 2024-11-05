@@ -18,3 +18,6 @@ schedules_api = "https://splatoon3.ink/data/schedules.json"
 
 # The number of hours to wait before notifying of consistent failures
 failure_threshold_hours = 6  # 6 hours
+
+# Whether to use a simpler console logger and silence DEBUG (example: "2024-11-04 23:28:43 | INFO     | _Configuration loaded. Ready to ink some turf!" instead of "2024-11-04 23:28:43.405 | INFO     | __main__:load_config:75 - Configuration loaded. Ready to ink some turf!")
+simple_console_logger = true
