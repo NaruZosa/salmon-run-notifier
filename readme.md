@@ -4,6 +4,7 @@ Welcome to the **Salmon Run Notifier**! This Python script fetches the current a
 
 ## 📑 Table of Contents
 
+- [🖼️ Examples](#examples)
 - [✨ Features](#features)
 - [📋 Requirements](#requirements)
 - [🛠️ Installation and usage](#installation-and-usage)
