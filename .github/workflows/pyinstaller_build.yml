@@ -18,3 +18,4 @@ jobs:
           python_ver: '3.13'
           spec: 'salmon_run_notifier.spec'
           requirements: 'requirements.txt'
+          upload_exe_with_name: 'salmon_run_notifier.exe'

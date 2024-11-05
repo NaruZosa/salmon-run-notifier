@@ -14,7 +14,8 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 # Copy the application
-COPY pyproject.toml poetry.lock main.py salmon_config_template.toml requirements.txt ./
+COPY pyproject.toml poetry.lock main.py requirements.txt ./
+COPY resources/ ./resources
 
 # Install dependencies
 RUN pip install -r requirements.txt
