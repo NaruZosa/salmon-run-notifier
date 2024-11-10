@@ -186,7 +186,14 @@ def _get_user_agent() -> str:
 
 
 def _cache_schedules(schedules: dict[str, Any]) -> None:
-    """Write schedules to cache."""
+    """Write schedules to cache.
+
+    Args:
+    ----
+        schedules (dict): A dictionary containing the schedules.
+
+    """
+
     with CACHE_FILE.open("w") as cache_file:
         # noinspection PyTypeChecker
         json.dump(schedules, cache_file)
@@ -196,7 +203,11 @@ def _cache_schedules(schedules: dict[str, Any]) -> None:
 def _extract_schedule_nodes(schedules: dict[str, Any]) -> dict[str, Any]:
     """Extract and organize schedule nodes for Regular, Big Run, and Eggstra Work.
 
-    Returns
+    Args:
+    ----
+        schedules (dict): A dictionary containing the schedules.
+
+    Returns:
     -------
         dict: The schedule nodes for Regular, Big Run, and Eggstra Work.
 
@@ -267,6 +278,7 @@ def _tidy_rotation(rotation: dict, schedule_type: str, timezone: tz.tzfile) -> d
         The formatted schedule.
 
     """
+
     start_time = datetime.datetime.fromisoformat(rotation["startTime"])
     end_time = datetime.datetime.fromisoformat(rotation["endTime"])
     return {
@@ -295,6 +307,7 @@ def has_been_alerted(rotation: dict) -> bool:
         bool: True if the rotation alert has already been sent, False otherwise.
 
     """
+
     if not ALERT_FILE.exists():
         return False
     with ALERT_FILE.open("r") as file:
@@ -318,6 +331,7 @@ def send_notification(rotation: dict, notifier: apprise.Apprise) -> None:
         KeyError: If there is a missing key in the rotation data.
 
     """
+
     if has_been_alerted(rotation):
         logger.info("Rotation already alerted. Not repeating this wave of Salmonids.")
         return
@@ -350,6 +364,7 @@ def _update_alert_file(rotation: dict) -> None:
         rotation (dict): The rotation data.
 
     """
+
     alerts = []
     if ALERT_FILE.exists():
         with ALERT_FILE.open("r") as file:
@@ -370,6 +385,7 @@ def notify_failure(notifier: apprise.Apprise) -> None:
         notifier (apprise.Apprise): The Apprise notifier instance.
 
     """
+
     try:
         notification = "Salmon Run Notifier has encountered failures for more than 6 hours. The Salmonids are overwhelming us!"
         logger.warning(notification)
@@ -390,6 +406,7 @@ def local_file(file_name: str, *, resources_folder: bool = False) -> Path:
         The path to the local file.
 
     """
+
     if resources_folder:
         file_name = Path("resources") / file_name
     if hasattr(sys, "_MEIPASS"):
@@ -399,7 +416,14 @@ def local_file(file_name: str, *, resources_folder: bool = False) -> Path:
 
 
 def setup_logger(*, simple_console_logging: bool) -> None:
-    """Configure loggers for the notifier."""
+    """Configure loggers for the notifier.
+
+    Args:
+    ----
+        simple_console_logging (bool): Whether to enable simpler console logging.
+
+    """
+
     if simple_console_logging:
         logger.configure(handlers=[{"sink": sys.stderr, "level": "INFO", "format": "<level>{time:YYYY-MM-DD HH:mm:ss} [{level}]</level> - {message}"}])
     else:
@@ -407,9 +431,32 @@ def setup_logger(*, simple_console_logging: bool) -> None:
     logger.add(Path.cwd() / "config" / "logs" / "salmon_notifier.log", level="TRACE", format="{time:YYYY-MM-DD at HH:mm:ss} | {level} | {name}:{function}:{line} | {message}", rotation="50 MB", compression="zip", retention="1 week")
 
 
+def setup_notifiers(apprise_paths: list[str]) -> apprise.Apprise:
+    """Configure notifiers to send alerts to.
+
+    Args:
+    ----
+        apprise_paths (list[str]): A list of apprise paths to notify.
+
+    Returns:
+    -------
+        apprise.Apprise: The apprise notifier instance.
+
+    """
+
+    notifier = apprise.Apprise()
+    for path in apprise_paths:
+        if path == "tgram://your_telegram_token/your_chat_id":
+            logger.info("You need to specify an apprise path in salmon_config.toml")
+            time.sleep(10)
+            sys.exit(66)
+        notifier.add(path)
+    return notifier
+
+
 # noinspection PyUnusedLocal
 def terminate(sigterm: signal.SIGTERM, frame: types.FrameType) -> None:  # noqa: ARG001
-    """Terminate cleanly. Needed for stopping swiftly when docker sends the command to stop.
+    """Terminate cleanly. Needed for respecting 'docker stop'.
 
     Args:
     ----
@@ -417,6 +464,7 @@ def terminate(sigterm: signal.SIGTERM, frame: types.FrameType) -> None:  # noqa:
         frame: The execution frame.
 
     """
+
     logger.info(f"Termination signal received at {datetime.datetime.now()}.")  # noqa: DTZ005
     sys.exit(0)
 
@@ -430,11 +478,14 @@ def main() -> None:
     logger.info("Configuration loaded. Ready to ink some turf!")
 
     local_timezone = tz.gettz(config.local_timezone)
+    if local_timezone is None:
+        logger.info("You need to specify your local timezone in salmon_config.toml")
+        time.sleep(10)
+        sys.exit(66)
     failure_threshold = config.failure_threshold_hours * 3600  # Convert hours to seconds
 
-    notifier = apprise.Apprise()
-    for path in config.apprise_paths:
-        notifier.add(path)
+    notifiers = setup_notifiers(config.apprise_paths)
+
     failure_start_time = None
 
     while True:
@@ -446,37 +497,52 @@ def main() -> None:
                 if failure_start_time is None:
                     failure_start_time = time.time()
                 elif time.time() - failure_start_time > failure_threshold:
-                    notify_failure(notifier)
+                    notify_failure(notifiers)
                     failure_start_time = None  # Reset failure start time after notification
                 logger.warning("No schedules available, retrying in 60 seconds. The Salmonids are hiding!")
                 time.sleep(60)
                 continue
 
             failure_start_time = None  # Reset failure start time on success
-            next_rotation = schedules[0]
-            if _within_quiet_hours(next_rotation, config):
-                logger.info(f"Next rotation occurs during quiet hours ({next_rotation["start_time"].strftime("%A %d %B at %H:%M")}), alert will be sent at the end of the quiet hours. Don't get cooked, stay off the hook!")
-                # noinspection PyTypeChecker
-                sleep_time = _quiet_period_sleep_time(next_rotation, config, local_timezone)
-            else:
-                logger.info("Next rotation occurs outside quiet hours, alert will be sent at the moment of rotation. Time to ink up!")
-                sleep_time = next_rotation["seconds_until_rotation"]
+            _sleep_until_rotation(next_rotation=schedules[0], config=config, local_timezone=local_timezone, notifiers=notifiers)
 
-            # Calculate days, hours, minutes, and seconds
-            days, remainder = divmod(sleep_time, 86400)
-            hours, remainder = divmod(remainder, 3600)
-            minutes, seconds = divmod(remainder, 60)
-            notification_send_time = datetime.datetime.now(tz=local_timezone) + datetime.timedelta(seconds=sleep_time)
-            notification_send_time_str = notification_send_time.strftime("%A %#d %B at %#I:%M%p")
-            if sleep_time > 0:
-                logger.info(f"Notifying in {int(days)} days, {int(hours)} hours, {int(minutes)} minutes, and {int(seconds)} seconds (on {notification_send_time_str}). Get ready to splat!")
-                time.sleep(sleep_time)
-            else:
-                logger.info(f"Notifying immediately (rotation started {notification_send_time_str}). Ink it up!")
-            send_notification(next_rotation, notifier)
         except Exception:  # noqa: BLE001
             logger.exception("An error occurred in the main loop. Waiting for a minute then trying again. Ran out of ink!")
             time.sleep(60)  # Wait a bit before retrying
+
+
+def _sleep_until_rotation(next_rotation: dict[str, Any], config: Config, local_timezone: tz.tz, notifiers: apprise.Apprise) -> None:
+    """Sleep until the next rotation starts.
+
+    Args:
+    ----
+        next_rotation (dict): The next rotation.
+        config (Config): The config instance.
+        local_timezone (tz.tz): The local timezone.
+        notifiers (apprise.Apprise): The apprise notifier instance.
+
+    """
+
+    if _within_quiet_hours(next_rotation, config):
+        logger.info(f"Next rotation occurs during quiet hours ({next_rotation["start_time"].strftime("%A %d %B at %H:%M")}), alert will be sent at the end of the quiet hours. Don't get cooked, stay off the hook!")
+        # noinspection PyTypeChecker
+        sleep_time = _quiet_period_sleep_time(next_rotation, config, local_timezone)
+    else:
+        logger.info("Next rotation occurs outside quiet hours, alert will be sent at the moment of rotation. Time to ink up!")
+        sleep_time = next_rotation["seconds_until_rotation"]
+
+    # Calculate days, hours, minutes, and seconds
+    days, remainder = divmod(sleep_time, 86400)
+    hours, remainder = divmod(remainder, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    notification_send_time = datetime.datetime.now(tz=local_timezone) + datetime.timedelta(seconds=sleep_time)
+    notification_send_time_str = notification_send_time.strftime("%A %#d %B at %#I:%M%p")
+    if sleep_time > 0:
+        logger.info(f"Notifying in {int(days)} days, {int(hours)} hours, {int(minutes)} minutes, and {int(seconds)} seconds (on {notification_send_time_str}). Get ready to splat!")
+        time.sleep(sleep_time)
+    else:
+        logger.info(f"Notifying immediately (rotation started {notification_send_time_str}). Ink it up!")
+    send_notification(next_rotation, notifiers)
 
 
 def _within_quiet_hours(rotation: dict[str, Any], config: Config) -> bool:
@@ -492,6 +558,7 @@ def _within_quiet_hours(rotation: dict[str, Any], config: Config) -> bool:
         Whether the rotation falls within quiet hours.
 
     """
+
     return config.alert_quiet_start <= rotation["start_time"].hour < config.alert_quiet_end
 
 
@@ -508,6 +575,7 @@ def _quiet_period_sleep_time(rotation: dict[str, Any], config: Config, timezone:
           The number of seconds until the end of the quiet hours.
 
     """
+
     quiet_end_time = rotation["start_time"].replace(hour=config.alert_quiet_end, minute=0, second=0)
     if rotation["start_time"].hour >= config.alert_quiet_start:
         quiet_end_time += datetime.timedelta(days=1)
