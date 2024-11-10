@@ -1,27 +1,32 @@
-"""Runs the main code for the Salmon Run Notifier."""
+"""Salmon Run Notifier: Notifies users of upcoming Salmon Run schedules."""
+
 import datetime
 import json
+import operator
 import shutil
 import signal
 import sys
 import time
+import tomllib
 import types
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict
+from pprint import pformat
+from typing import Any
 
 import apprise
 import requests
-import tomllib
 from dateutil import tz
 from loguru import logger
 
-alert_file = Path("config/last.alert")
+# Path for storing alerts and cached data
+ALERT_FILE = Path("config/last.alert")
+CACHE_FILE = Path("config/cache.temp")
 
 
 @dataclass
 class Config:
-    """Configuration settings for the Salmon Run Notifier.
+    """Configuration settings for the notifier.
 
     Attributes
     ----------
@@ -44,13 +49,13 @@ class Config:
     simple_console_logger: bool
 
 
-def load_config(config_path: Path, config_template_path: Path) -> Config:
-    """Load configuration from a TOML file.
+def load_config(config_path: Path, template_path: Path) -> Config:
+    """Load configuration settings from a TOML file or create from template if missing.
 
     Args:
     ----
         config_path (Path): The path to the configuration file.
-        config_template_path (Path): The path to the configuration template file.
+        template_path (Path): The path to the configuration template file.
 
     Returns:
     -------
@@ -63,34 +68,31 @@ def load_config(config_path: Path, config_template_path: Path) -> Config:
         tomllib.TOMLDecodeError: If there is an error parsing the configuration file.
 
     """
-    try:
-        if config_path.exists() is False:
-            logger.info("Configuration doesn't exist. Copying template.")
-            config_path.parent.mkdir(parents=True, exist_ok=True)  # Make the config directory if it doesn't exist.
-            shutil.copy(config_template_path, config_path)
-            logger.info(f"Configuration template copied to {config_path}. Edit the configuration and restart the program. Exiting the lobby in 10 seconds.")
-            time.sleep(10)
-            sys.exit(66)  # Equivalent to 'EX_NOINPUT'
-        with config_path.open("rb") as f:
-            config_data = tomllib.load(f)
-        settings = config_data["settings"]
 
-        return Config(
-            local_timezone=settings["local_timezone"],
-            alert_quiet_start=settings["alert_quiet_start"],
-            alert_quiet_end=settings["alert_quiet_end"],
-            apprise_paths=settings["apprise_paths"],
-            schedules_api=settings["schedules_api"],
-            failure_threshold_hours=settings["failure_threshold_hours"],
-            simple_console_logger=settings["simple_console_logger"],
-        )
-    except (FileNotFoundError, KeyError, tomllib.TOMLDecodeError) as e:
-        logger.exception(f"Error loading configuration: {e}. Exiting the lobby.")
+    if not config_path.exists():
+        _copy_template(config_path, template_path)
+        sys.exit(66)  # Exit to prompt the user to configure
+
+    try:
+        with config_path.open("rb") as f:
+            config_data = tomllib.load(f)["settings"]
+        return Config(**config_data)
+    except (FileNotFoundError, KeyError, tomllib.TOMLDecodeError):
+        logger.exception("Error loading configuration. Exiting the lobby.")
         sys.exit(1)
 
 
-def get_schedules(schedules_api: str) -> Dict[str, Any]:  # noqa: FA100
-    """Fetch and return the current and upcoming Salmon Run schedules.
+def _copy_template(config_path: Path, template_path: Path) -> None:
+    """Copy configuration template and notify user to set up."""
+    logger.info("Configuration not found. Copying template.")
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy(template_path, config_path)
+    logger.info(f"Config template copied to {config_path}. Please configure and restart. Exiting the lobby in 10 seconds.")
+    time.sleep(10)
+
+
+def get_schedules(schedules_api: str) -> dict[str, Any]:
+    """Fetch schedules from cache or API.
 
     Args:
     ----
@@ -105,55 +107,115 @@ def get_schedules(schedules_api: str) -> Dict[str, Any]:  # noqa: FA100
         requests.RequestException: If there is an error fetching the schedules.
 
     """
-    cache_path = Path("config/cache.temp")
-    if cache_path.exists():
-        with cache_path.open("r") as cache_file:
-            cached_data = json.load(cache_file)
-            # Find the earliest end_time, ignoring 'bannerImage' and any empty lists
-            end_time = min(
-                datetime.datetime.fromisoformat(rotation["endTime"]).timestamp()
-                for schedule in cached_data.values() if schedule is not None and "nodes" in schedule
-                for rotation in schedule["nodes"]
-            )
-            if time.time() < end_time:
-                time_remaining = end_time - time.time()
-                days, remainder = divmod(time_remaining, 86400)
-                hours, remainder = divmod(remainder, 3600)
-                minutes, _ = divmod(remainder, 60)
-                logger.debug(f"Using cached schedules. Cache expires in {int(days)} days, {int(hours)} hours, and {int(minutes)} minutes (next rotation).")
-                return {
-                    "Regular": cached_data["regularSchedules"]["nodes"],
-                    "Big Run": cached_data["bigRunSchedules"]["nodes"],
-                    "Eggstra Work": cached_data["teamContestSchedules"]["nodes"],
-                }
+
+    if _cache_is_valid():
+        logger.debug("Using cached schedules.")
+        return _load_cached_data()
 
     try:
-        with local_file("pyproject.toml").open("rb") as pyproject:
-            version = tomllib.load(pyproject)["tool"]["poetry"]["version"]
-        response = requests.get(schedules_api, headers={"User-Agent": f"Salmon Run Notifier - Version {version}"})  # noqa: S113
+        response = requests.get(schedules_api, headers={"User-Agent": _get_user_agent()}, timeout=10)
         response.raise_for_status()
         schedules = response.json()["data"]["coopGroupingSchedule"]
-        with cache_path.open("w") as cache_file:
-            # noinspection PyTypeChecker
-            json.dump(schedules, cache_file)
-        logger.debug("Fetched schedules successfully and updated cache. Ready to splat some Salmonids!")
-        return {
-            "Regular": schedules["regularSchedules"]["nodes"],
-            "Big Run": schedules["bigRunSchedules"]["nodes"],
-            "Eggstra Work": schedules["teamContestSchedules"]["nodes"],
-        }
-    except requests.RequestException as e:
-        logger.exception(f"Failed to fetch schedules: {e}. The Salmonids are causing trouble!")
+        _cache_schedules(schedules)
+        return _extract_schedule_nodes(schedules)
+    except requests.RequestException:
+        logger.exception("Failed to fetch schedules. The Salmonids are causing trouble!")
         return {"Regular": [], "Big Run": [], "Eggstra Work": []}
 
 
-def tidy_schedules(schedules: Dict[str, Any], local_timezone: tz.tzfile) -> list:  # noqa: FA100
-    """Reformat and tidy the schedules.
+def _cache_is_valid() -> bool:
+    """Check if the cached data is still valid.
+
+    Returns
+    -------
+        bool: Whether the cached data is still valid.
+
+    """
+
+    if not CACHE_FILE.exists():
+        return False
+
+    with CACHE_FILE.open("r") as cache_file:
+        cached_data = json.load(cache_file)
+        # Find the earliest end_time, ignoring 'bannerImage' and any empty lists
+        end_time = min(
+            datetime.datetime.fromisoformat(rotation["endTime"]).timestamp()
+            for schedule in cached_data.values() if schedule is not None and "nodes" in schedule
+            for rotation in schedule["nodes"]
+        )
+    if time.time() < end_time:
+        time_remaining = end_time - time.time()
+        days, remainder = divmod(time_remaining, 86400)
+        hours, remainder = divmod(remainder, 3600)
+        minutes, _ = divmod(remainder, 60)
+        logger.debug(f"Using cached schedules. Cache expires in {int(days)} days, {int(hours)} hours, and {int(minutes)} minutes (next rotation).")
+        return True
+    return False
+
+
+def _load_cached_data() -> dict[str, Any]:
+    """Load cached schedules.
+
+    Returns
+    -------
+        dict: The cached schedules.
+
+    """
+
+    with CACHE_FILE.open("r") as cache_file:
+        cached_data = json.load(cache_file)
+    return _extract_schedule_nodes(cached_data)
+
+
+def _get_user_agent() -> str:
+    """Return a user agent string for requests.
+
+    Returns
+    -------
+        str: The user agent string.
+
+    """
+
+    # noinspection PyBroadException
+    try:
+        with local_file("pyproject.toml").open("rb") as pyproject:
+            version = tomllib.load(pyproject)["tool"]["poetry"]["version"]
+    except Exception:  # noqa: BLE001
+        version = "Unknown"
+    return f"Salmon Run Notifier - Version {version}"
+
+
+def _cache_schedules(schedules: dict[str, Any]) -> None:
+    """Write schedules to cache."""
+    with CACHE_FILE.open("w") as cache_file:
+        # noinspection PyTypeChecker
+        json.dump(schedules, cache_file)
+    logger.debug("Fetched schedules successfully and updated cache. Ready to splat some Salmonids!")
+
+
+def _extract_schedule_nodes(schedules: dict[str, Any]) -> dict[str, Any]:
+    """Extract and organize schedule nodes for Regular, Big Run, and Eggstra Work.
+
+    Returns
+    -------
+        dict: The schedule nodes for Regular, Big Run, and Eggstra Work.
+
+    """
+
+    return {
+        "Regular": schedules["regularSchedules"]["nodes"],
+        "Big Run": schedules["bigRunSchedules"]["nodes"],
+        "Eggstra Work": schedules["teamContestSchedules"]["nodes"],
+    }
+
+
+def tidy_schedules(schedules: dict[str, Any], timezone: tz.tzfile) -> list:
+    """Organize and return a list of sorted schedules.
 
     Args:
     ----
         schedules (dict): A dictionary containing the schedules.
-        local_timezone (tz.tzfile): The local timezone for the notifier.
+        timezone (tz.tzfile): The local timezone for the notifier.
 
     Returns:
     -------
@@ -164,73 +226,65 @@ def tidy_schedules(schedules: Dict[str, Any], local_timezone: tz.tzfile) -> list
         KeyError: If there is an error accessing schedule data.
 
     """
+
+    # noinspection PyBroadException
     try:
-        for schedule_type, rotations in schedules.items():
-            for i, rotation in enumerate(rotations):
-                start_time = datetime.datetime.fromisoformat(rotation["startTime"])
-                end_time = datetime.datetime.fromisoformat(rotation["endTime"])
-                updated_rotation = {
-                    "seconds_until_rotation": start_time.timestamp() - datetime.datetime.now(tz=datetime.timezone.utc).timestamp(),
-                    "stage": rotation["setting"]["coopStage"]["name"],
-                    "boss": rotation["setting"]["boss"]["name"] if rotation["setting"]["boss"] is not None else "Random",
-                    "weapons": [weapon["name"] if weapon["__splatoon3ink_id"] != "747937841598fff7" else "Grizzco Random" for weapon in rotation["setting"]["weapons"]],
-                    "type": schedule_type,
-                    "start_time": start_time.astimezone(local_timezone),
-                    "end_time": end_time.astimezone(local_timezone),
-                }
-                # Remove unnecessary information
-                for key in ["setting", "startTime", "endTime", "__splatoon3ink_king_salmonid_guess"]:
-                    updated_rotation.pop(key, None)
-                # Update the rotation in the schedules dictionary
-                schedules[schedule_type][i] = updated_rotation
+        tidied_schedules = [
+            _tidy_rotation(rotation, schedule_type, timezone)
+            for schedule_type, rotations in schedules.items()
+            for rotation in rotations
+        ]
 
         # Flatten and sort schedules
-        flattened_schedules = sorted(
-            [rotation for rotations in schedules.values() for rotation in rotations],
-            key=lambda x: x["seconds_until_rotation"],
+        sorted_schedules = sorted(
+            tidied_schedules, key=operator.itemgetter("seconds_until_rotation"),
         )
-        logger.debug("Tidied schedules successfully. Ready for the next wave!")
+        logger.debug("Schedules tidied successfully. Ready for the next wave!")
+        logger.trace(f"Schedules:\n"
+                     f"{pformat(sorted_schedules)}")
         # Remove currently running rotations only if they have alerted previously
-        new_alerts = [rotation for rotation in flattened_schedules if rotation["seconds_until_rotation"] > 0 or has_been_alerted(rotation) is False]
+        return [rotation for rotation in sorted_schedules if rotation["seconds_until_rotation"] > 0 or not has_been_alerted(rotation)]
 
-    except KeyError as e:
-        logger.exception(f"Key error while tidying schedules: {e}. The Salmonids are messing with the data!")
+    except KeyError:
+        logger.exception("Key error while tidying schedules. The Salmonids are messing with the data!")
         return []
-    except Exception as e:  # noqa: BLE001
-        logger.exception(f"Failed to tidy schedules: {e}. The ink is everywhere!")
+    except Exception:  # noqa: BLE001
+        logger.exception("Error tidying schedules. The ink is everywhere!")
         return []
-    else:
-        return new_alerts
 
 
-def update_alert_file(rotation: dict) -> None:
-    """Update the alert file with the latest alert.
+def _tidy_rotation(rotation: dict, schedule_type: str, timezone: tz.tzfile) -> dict:
+    """Reformat a single rotation.
 
     Args:
     ----
-        rotation (dict): The rotation data.
+        rotation (dict): A dictionary containing the schedules.
+        schedule_type (str): The schedule type.
+        timezone (tz.tzfile): The local timezone for the notifier.
+
+    Returns:
+    -------
+        The formatted schedule.
 
     """
-    if alert_file.exists():
-        with alert_file.open("r") as file:
-            alerts = json.load(file)
-    else:
-        alerts = []
-
-    # Add the new alert
-    alerts.append({"start_time": rotation["start_time"].isoformat()})
-
-    # Keep only the last 3 alerts
-    alerts = alerts[-3:]
-
-    with alert_file.open("w") as file:
-        # noinspection PyTypeChecker
-        json.dump(alerts, file, indent=4)
-    logger.debug("Alert file updated. Keeping track of the latest Salmon Run rotations.")
+    start_time = datetime.datetime.fromisoformat(rotation["startTime"])
+    end_time = datetime.datetime.fromisoformat(rotation["endTime"])
+    return {
+        "seconds_until_rotation": start_time.timestamp() - datetime.datetime.now(tz=datetime.UTC).timestamp(),
+        "stage": rotation["setting"]["coopStage"]["name"],
+        "boss": rotation["setting"]["boss"]["name"] if rotation["setting"]["boss"] is not None else "Random",
+        "weapons": [
+            weapon["name"] if weapon["__splatoon3ink_id"] != "747937841598fff7" else "Grizzco Random"
+            for weapon in rotation["setting"]["weapons"]
+        ],
+        "type": schedule_type,
+        "start_time": start_time.astimezone(timezone),
+        "end_time": end_time.astimezone(timezone),
+    }
 
 
 def has_been_alerted(rotation: dict) -> bool:
-    """Check if the rotation has already been alerted.
+    """Check if rotation alert has already been sent.
 
     Args:
     ----
@@ -238,25 +292,21 @@ def has_been_alerted(rotation: dict) -> bool:
 
     Returns:
     -------
-        bool: True if the rotation has been alerted, False otherwise.
+        bool: True if the rotation alert has already been sent, False otherwise.
 
     """
-    if not alert_file.exists():
+    if not ALERT_FILE.exists():
         return False
-
-    with alert_file.open("r") as file:
+    with ALERT_FILE.open("r") as file:
         alerts = json.load(file)
-
-    for alert in alerts:
-        if alert["start_time"] == rotation["start_time"].isoformat():
-            logger.debug("Rotation has already been alerted. No need to splat again!")
-            return True
-
+    if any(alert["start_time"] == rotation["start_time"].isoformat() for alert in alerts):
+        logger.debug("Rotation has already been alerted. No need to splat again!")
+        return True
     return False
 
 
 def send_notification(rotation: dict, notifier: apprise.Apprise) -> None:
-    """Send a notification for the given rotation, and check and update the alert file.
+    """Send a notification for the Salmon Run rotation.
 
     Args:
     ----
@@ -269,26 +319,47 @@ def send_notification(rotation: dict, notifier: apprise.Apprise) -> None:
 
     """
     if has_been_alerted(rotation):
-        logger.info("Notification already sent for this rotation. Skipping this wave of Salmonids.")
+        logger.info("Rotation already alerted. Not repeating this wave of Salmonids.")
         return
+
+    # noinspection PyBroadException
     try:
         weapons_list = "\n".join(f"Weapon {i + 1}: {weapon}" for i, weapon in enumerate(rotation["weapons"]))
-        notification = (
-            f"Salmon Run rotation start: {rotation['start_time'].strftime('%A %#d %B at %#I:%M%p')}\n"
-            f"Rotation end: {rotation['end_time'].strftime('%A %#d %B at %#I:%M%p')}\n"
+        notification_text = (
+            f"Rotation: {rotation['start_time'].strftime('%A %#d %B at %#I:%M%p')} - {rotation['end_time'].strftime('%A %#d %B at %#I:%M%p')}\n"
             f"Map: {rotation['stage']}\n"
-            f"{weapons_list}\n"
             f"Boss: {rotation['boss']}\n"
+            f"{weapons_list}\n"
             f"Type: {rotation['type']}\n"
             f"More details: https://splatoon3.ink/salmonrun"
         )
-        logger.info(notification)
-        notifier.notify(body=notification)
-        update_alert_file(rotation)
-    except KeyError as e:
-        logger.exception(f"Missing key in rotation data: {e}. Looks like a Salmonid snatched it!")
-    except Exception as e:  # noqa: BLE001
-        logger.exception(f"Failed to send notification: {e}. Splatted while sending alert!")
+        logger.info(notification_text)
+        notifier.notify(body=notification_text)
+        _update_alert_file(rotation)
+    except KeyError:
+        logger.exception("Missing key in rotation data. Looks like a Salmonid snatched it!")
+    except Exception:  # noqa: BLE001
+        logger.exception("Error sending notification. Splatted while sending alert!")
+
+
+def _update_alert_file(rotation: dict) -> None:
+    """Record alerted rotations in a file.
+
+    Args:
+    ----
+        rotation (dict): The rotation data.
+
+    """
+    alerts = []
+    if ALERT_FILE.exists():
+        with ALERT_FILE.open("r") as file:
+            alerts = json.load(file)
+    # Add the new alert
+    alerts.append({"start_time": rotation["start_time"].isoformat()})
+    with ALERT_FILE.open("w") as file:
+        # noinspection PyTypeChecker
+        json.dump(alerts[-3:], file, indent=4)  # Keep only last 3 alerts
+    logger.debug("Alert file updated. Keeping track of the latest Salmon Run rotations.")
 
 
 def notify_failure(notifier: apprise.Apprise) -> None:
@@ -307,20 +378,6 @@ def notify_failure(notifier: apprise.Apprise) -> None:
         logger.exception(f"Failed to send failure notification: {e}. Notification splatted by a Charger!")
 
 
-# noinspection PyUnusedLocal
-def terminate(sigterm: signal.SIGTERM, frame: types.FrameType) -> None:  # noqa: ARG001
-    """Terminate cleanly. Needed for stopping swiftly when docker sends the command to stop.
-
-    Args:
-    ----
-        sigterm (signal.Signal): The termination signal.
-        frame: The execution frame.
-
-    """
-    logger.info(f"Termination signal sent: {datetime.datetime.now()}")  # noqa: DTZ005
-    sys.exit(0)
-
-
 def local_file(file_name: str, *, resources_folder: bool = False) -> Path:
     """Pull file from exe if packaged with PyInstaller, otherwise pull file from next to Salmon Run Notifier.
 
@@ -328,6 +385,9 @@ def local_file(file_name: str, *, resources_folder: bool = False) -> Path:
     ----
         file_name (str): The file name.
         resources_folder (bool): Whether to pull from the 'resources' subfolder.
+
+    Returns:
+        The path to the local file.
 
     """
     if resources_folder:
@@ -338,26 +398,47 @@ def local_file(file_name: str, *, resources_folder: bool = False) -> Path:
     return Path.cwd() / file_name   # Not packaged with PyInstaller, pull from next to the Python file
 
 
-def main() -> None:
-    """Run the main loop."""
-    signal.signal(signal.SIGTERM, terminate)
-    config_path = Path.cwd() / "config" / "salmon_config.toml"
+def setup_logger(*, simple_console_logging: bool) -> None:
+    """Configure loggers for the notifier."""
+    if simple_console_logging:
+        logger.configure(handlers=[{"sink": sys.stderr, "level": "INFO", "format": "<level>{time:YYYY-MM-DD HH:mm:ss} [{level}]</level> - {message}"}])
+    else:
+        logger.configure(handlers=[{"sink": sys.stderr, "level": "DEBUG", "format": "<level>{time:YYYY-MM-DD HH:mm:ss} [{level}]</level> - {name}:{function}:{line} - {message}"}])
+    logger.add(Path.cwd() / "config" / "logs" / "salmon_notifier.log", level="TRACE", format="{time:YYYY-MM-DD at HH:mm:ss} | {level} | {name}:{function}:{line} | {message}", rotation="50 MB", compression="zip", retention="1 week")
 
-    config_template_path = local_file("salmon_config_template.toml", resources_folder=True)  # Not packaged with PyInstaller, pull config template from next to the Python file
-    config = load_config(config_path, config_template_path)
-    if config.simple_console_logger:
-        logger.configure(handlers=[{"sink": sys.stderr, "level": "INFO", "format": "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>"}])
+
+# noinspection PyUnusedLocal
+def terminate(sigterm: signal.SIGTERM, frame: types.FrameType) -> None:  # noqa: ARG001
+    """Terminate cleanly. Needed for stopping swiftly when docker sends the command to stop.
+
+    Args:
+    ----
+        sigterm (signal.Signal): The termination signal.
+        frame: The execution frame.
+
+    """
+    logger.info(f"Termination signal received at {datetime.datetime.now()}.")  # noqa: DTZ005
+    sys.exit(0)
+
+
+def main() -> None:
+    """Monitor and notify of Salmon Run rotations."""
+    signal.signal(signal.SIGTERM, terminate)
+    config = load_config(config_path=Path("config/salmon_config.toml"), template_path=local_file("salmon_config_template.toml", resources_folder=True))
+    setup_logger(simple_console_logging=config.simple_console_logger)
+
     logger.info("Configuration loaded. Ready to ink some turf!")
 
     local_timezone = tz.gettz(config.local_timezone)
     failure_threshold = config.failure_threshold_hours * 3600  # Convert hours to seconds
 
     notifier = apprise.Apprise()
-    for notification_destination in config.apprise_paths:
-        notifier.add(notification_destination)
+    for path in config.apprise_paths:
+        notifier.add(path)
     failure_start_time = None
 
     while True:
+        # noinspection PyBroadException
         try:
             # noinspection PyTypeChecker
             schedules = tidy_schedules(get_schedules(config.schedules_api), local_timezone)
@@ -373,31 +454,64 @@ def main() -> None:
 
             failure_start_time = None  # Reset failure start time on success
             next_rotation = schedules[0]
-            next_start_hour = next_rotation["start_time"].hour
-
-            if config.alert_quiet_start <= next_start_hour < config.alert_quiet_end:
+            if _within_quiet_hours(next_rotation, config):
                 logger.info(f"Next rotation occurs during quiet hours ({next_rotation["start_time"].strftime("%A %d %B at %H:%M")}), alert will be sent at the end of the quiet hours. Don't get cooked, stay off the hook!")
-                alert_time = next_rotation["start_time"].replace(hour=config.alert_quiet_end, minute=0)
-                sleep_seconds = alert_time.timestamp() - datetime.datetime.now(tz=local_timezone).timestamp()
+                # noinspection PyTypeChecker
+                sleep_time = _quiet_period_sleep_time(next_rotation, config, local_timezone)
             else:
                 logger.info("Next rotation occurs outside quiet hours, alert will be sent at the moment of rotation. Time to ink up!")
-                sleep_seconds = next_rotation["seconds_until_rotation"]
+                sleep_time = next_rotation["seconds_until_rotation"]
 
             # Calculate days, hours, minutes, and seconds
-            days, remainder = divmod(sleep_seconds, 86400)
+            days, remainder = divmod(sleep_time, 86400)
             hours, remainder = divmod(remainder, 3600)
             minutes, seconds = divmod(remainder, 60)
-            notification_send_time = datetime.datetime.now(tz=local_timezone) + datetime.timedelta(seconds=sleep_seconds)
+            notification_send_time = datetime.datetime.now(tz=local_timezone) + datetime.timedelta(seconds=sleep_time)
             notification_send_time_str = notification_send_time.strftime("%A %#d %B at %#I:%M%p")
-            if sleep_seconds > 0:
+            if sleep_time > 0:
                 logger.info(f"Notifying in {int(days)} days, {int(hours)} hours, {int(minutes)} minutes, and {int(seconds)} seconds (on {notification_send_time_str}). Get ready to splat!")
-                time.sleep(sleep_seconds)
+                time.sleep(sleep_time)
             else:
                 logger.info(f"Notifying immediately (rotation started {notification_send_time_str}). Ink it up!")
             send_notification(next_rotation, notifier)
-        except Exception as e:  # noqa: BLE001
-            logger.exception(f"An error occurred in the main loop. Waiting for a minute then trying again: {e}. Ran out of ink!")
+        except Exception:  # noqa: BLE001
+            logger.exception("An error occurred in the main loop. Waiting for a minute then trying again. Ran out of ink!")
             time.sleep(60)  # Wait a bit before retrying
+
+
+def _within_quiet_hours(rotation: dict[str, Any], config: Config) -> bool:
+    """Check if rotation falls within quiet hours.
+
+    Args:
+    ----
+        rotation (dict[str, Any]): The rotation data.
+        config (Config): The notifier object.
+
+    Returns:
+    -------
+        Whether the rotation falls within quiet hours.
+
+    """
+    return config.alert_quiet_start <= rotation["start_time"].hour < config.alert_quiet_end
+
+
+def _quiet_period_sleep_time(rotation: dict[str, Any], config: Config, timezone: tz.tzfile) -> int:
+    """Calculate time to wait until quiet hours end.
+
+    Args:
+    ----
+    rotation (dict): The rotation data.
+    config (Config): The notifier config.
+    timezone (tz.tzfile): The local timezone.
+
+    Returns:
+          The number of seconds until the end of the quiet hours.
+
+    """
+    quiet_end_time = rotation["start_time"].replace(hour=config.alert_quiet_end, minute=0, second=0)
+    if rotation["start_time"].hour >= config.alert_quiet_start:
+        quiet_end_time += datetime.timedelta(days=1)
+    return (quiet_end_time - datetime.datetime.now(timezone)).total_seconds()
 
 
 if __name__ == "__main__":

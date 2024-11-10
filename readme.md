@@ -34,7 +34,7 @@ Welcome to the **Salmon Run Notifier**! This Python script fetches the current a
 - Docker
 
 ### Python package
-- Python 3.13
+- Python 3.13 (3.9+ should work, but untested)
 - `apprise` library
 - `requests` library
 - `python-dateutil` library
