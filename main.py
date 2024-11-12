@@ -340,7 +340,8 @@ def send_notification(rotation: dict, notifier: apprise.Apprise) -> None:
     try:
         weapons_list = "\n".join(f"Weapon {i + 1}: {weapon}" for i, weapon in enumerate(rotation["weapons"]))
         notification_text = (
-            f"Rotation: {rotation['start_time'].strftime('%A %#d %B at %#I:%M%p')} - {rotation['end_time'].strftime('%A %#d %B at %#I:%M%p')}\n"
+            f"Rotation start: {rotation['start_time'].strftime('%A %d %B at %I:%M%p').replace(" 0", " ")}\n"  # The 'replace' is to remove 0 padding the hours
+            f"Rotation end: {rotation['end_time'].strftime('%A %d %B at %I:%M%p').replace(" 0", " ")}\n"  # The 'replace' is to remove 0 padding the hours
             f"Map: {rotation['stage']}\n"
             f"Boss: {rotation['boss']}\n"
             f"{weapons_list}\n"
@@ -482,6 +483,8 @@ def main() -> None:
         logger.info("You need to specify your local timezone in salmon_config.toml")
         time.sleep(10)
         sys.exit(66)
+    logger.trace(f"Loaded timezone: {local_timezone}")
+    logger.trace(f"Current time in {local_timezone}: {datetime.datetime.now(local_timezone)}")
     failure_threshold = config.failure_threshold_hours * 3600  # Convert hours to seconds
 
     notifiers = setup_notifiers(config.apprise_paths)
