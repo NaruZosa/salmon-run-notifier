@@ -526,7 +526,7 @@ def _sleep_until_rotation(next_rotation: dict[str, Any], config: Config, local_t
 
     """
 
-    if _within_quiet_hours(next_rotation, config):
+    if _within_quiet_hours(next_rotation["start_time"], config) and _within_quiet_hours(datetime.datetime.now(), config):
         logger.info(f"Next rotation occurs during quiet hours ({next_rotation["start_time"].strftime("%A %d %B at %H:%M")}), alert will be sent at the end of the quiet hours. Don't get cooked, stay off the hook!")
         # noinspection PyTypeChecker
         sleep_time = _quiet_period_sleep_time(next_rotation, config, local_timezone)
@@ -548,12 +548,12 @@ def _sleep_until_rotation(next_rotation: dict[str, Any], config: Config, local_t
     send_notification(next_rotation, notifiers)
 
 
-def _within_quiet_hours(rotation: dict[str, Any], config: Config) -> bool:
+def _within_quiet_hours(time_to_check: datetime.datetime, config: Config) -> bool:
     """Check if rotation falls within quiet hours.
 
     Args:
     ----
-        rotation (dict[str, Any]): The rotation data.
+        time_to_check: (datetime.datetime): The time to check if within quiet hours.
         config (Config): The notifier object.
 
     Returns:
@@ -562,7 +562,7 @@ def _within_quiet_hours(rotation: dict[str, Any], config: Config) -> bool:
 
     """
 
-    return config.alert_quiet_start <= rotation["start_time"].hour < config.alert_quiet_end
+    return config.alert_quiet_start <= time_to_check.hour < config.alert_quiet_end
 
 
 def _quiet_period_sleep_time(rotation: dict[str, Any], config: Config, timezone: tz.tzfile) -> int:
@@ -579,10 +579,15 @@ def _quiet_period_sleep_time(rotation: dict[str, Any], config: Config, timezone:
 
     """
 
+    # Set quiet end time to today's date with quiet end hour, in the same timezone
     quiet_end_time = rotation["start_time"].replace(hour=config.alert_quiet_end, minute=0, second=0)
-    if rotation["start_time"].hour >= config.alert_quiet_start:
+
+    # If quiet end time is in the past (for today), add a day to move it to the next day
+    if quiet_end_time <= datetime.datetime.now(timezone):
         quiet_end_time += datetime.timedelta(days=1)
-    return (quiet_end_time - datetime.datetime.now(timezone)).total_seconds()
+
+    # Calculate the seconds until the end of quiet hours
+    return int((quiet_end_time - datetime.datetime.now(timezone)).total_seconds())
 
 
 if __name__ == "__main__":
