@@ -22,7 +22,7 @@ RUN pip install -r requirements.txt
 
 # Create config directory and change permissions
 RUN mkdir -p /app/config
-RUN chmod 0777 -R /app/config # Fix directory permissions issues, notably affecting Unraid
+RUN chmod 777 -R /app/config # Fix directory permissions issues, notably affecting Unraid
 
 # Run the application
 CMD ["python", "-m", "main"]

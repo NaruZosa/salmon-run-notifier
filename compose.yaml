@@ -1,6 +1,6 @@
 services:
   salmon_run_notifier:
-    image: naruzosa/salmon_run_notifier:latest
+    image: ghcr.io/naruzosa/salmon_run_notifier:latest
     build:  # Fallback in case the image is unavailable
       context: .
       dockerfile: Dockerfile

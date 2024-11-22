@@ -43,7 +43,7 @@ Welcome to the **Salmon Run Notifier**! This Python script fetches the current a
 ## Installation and Usage
 
 ### Option 1: Windows binary
-1. Download the latest exe [releases](/releases/latest/download/asset-name.zip) 
+1. Download the latest exe [releases](/releases/latest/download/salmon_run_notifier.exe) 
 2. Run the exe
 
 
